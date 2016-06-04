@@ -130,8 +130,13 @@ template <typename Dtype>
 inline void createNdFilterDesc(cudnnFilterDescriptor_t* desc,
     std::vector<int> shape) {
   CUDNN_CHECK(cudnnCreateFilterDescriptor(desc));
+#if CUDNN_VERSION_MIN(5, 0, 0)
   CUDNN_CHECK(cudnnSetFilterNdDescriptor(*desc, dataType<Dtype>::type,
-              shape.size(), shape.data()));
+              CUDNN_TENSOR_NCHW, shape.size(), shape.data()));
+#else
+  CUDNN_CHECK(cudnnSetFilterNdDescriptor_v4(*desc, dataType<Dtype>::type,
+              CUDNN_TENSOR_NCHW, shape.size(), shape.data()));
+#endif
 }
 
 template <typename Dtype>
@@ -154,15 +159,22 @@ inline void setNdConvolutionDesc(cudnnConvolutionDescriptor_t* conv,
   int nbDims;
   std::vector<int> shape(pad.size()+2);
   cudnnDataType_t cudnn_type;
-  cudnnGetFilterNdDescriptor(filter, shape.size(), &cudnn_type, &nbDims,
-      shape.data());
+  cudnnTensorFormat_t cudnn_tensor_format;
+#if CUDNN_VERSION_MIN(5, 0, 0)
+  cudnnGetFilterNdDescriptor(filter, shape.size(), &cudnn_type,
+      &cudnn_tensor_format, &nbDims, shape.data());
+#else
+  cudnnGetFilterNdDescriptor_v4(filter, shape.size(), &cudnn_type,
+      &cudnn_tensor_format, &nbDims, shape.data());
+#endif
+  // TODO(chuck): what to do with cudnn_tensor_format?
   CHECK_EQ(nbDims, pad.size()+2) <<
       "Dimensions of filters and pad don't match !";
   CHECK_EQ(nbDims, stride.size()+2) <<
       "Dimensions of filters and stride don't match !";
   std::vector<int> upscale(pad.size(), 1);
 // At least from version 4000, an extra CUDNN_TYPE is expected
-#if CUDNN_VERSION >= 4000
+#if CUDNN_VERSION_MIN(4, 0, 0)
   CUDNN_CHECK(cudnnSetConvolutionNdDescriptor(*conv,
               pad.size(), pad.data(), stride.data(), upscale.data(),
               CUDNN_CROSS_CORRELATION, cudnn_type));
@@ -216,8 +228,15 @@ inline void createNdPoolingDesc(cudnnPoolingDescriptor_t* pool_desc,
     LOG(FATAL) << "Unknown pooling method.";
   }
   CUDNN_CHECK(cudnnCreatePoolingDescriptor(pool_desc));
-  CUDNN_CHECK(cudnnSetPoolingNdDescriptor(*pool_desc, *mode, shape.size(),
-              shape.data(), pad.data(), stride.data()));
+#if CUDNN_VERSION_MIN(5, 0, 0)
+  CUDNN_CHECK(cudnnSetPoolingNdDescriptor(*pool_desc, *mode,
+              CUDNN_PROPAGATE_NAN, shape.size(), shape.data(), pad.data(),
+              stride.data()));
+#else
+  CUDNN_CHECK(cudnnSetPoolingNdDescriptor_v4(*pool_desc, *mode,
+              CUDNN_PROPAGATE_NAN, shape.size(), shape.data(), pad.data(),
+              stride.data()));
+#endif
 }
 
 template <typename Dtype>
